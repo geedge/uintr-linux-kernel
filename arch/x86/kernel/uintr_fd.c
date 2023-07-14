@@ -301,16 +301,23 @@ out_fdput:
 }
 
 /*
- * sys_uintr_wait - Wait for a user interrupt
+ * sys_uintr_wait - Wait for a user interrupt for the specified time
  */
-SYSCALL_DEFINE1(uintr_wait, unsigned int, flags)
+SYSCALL_DEFINE2(uintr_wait, u64, usec, unsigned int, flags)
 {
+	ktime_t expires;
+
 	if (!uintr_arch_enabled())
 		return -EOPNOTSUPP;
 
 	if (flags)
 		return -EINVAL;
 
-	/* TODO: Add a timeout option */
-	return uintr_receiver_wait();
+	if (usec == 0)
+		return 0;
+
+	/* For now, use a default timeout value of 100 usec */
+	/* For qemu 2575 is recommend*/
+	expires = usec * NSEC_PER_USEC;
+	return uintr_receiver_wait(&expires);
 }

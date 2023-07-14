@@ -7,6 +7,7 @@
  */
 #define pr_fmt(fmt)    "uintr: " fmt
 
+#include <linux/hrtimer.h>
 #include <linux/refcount.h>
 #include <linux/sched.h>
 #include <linux/sched/task.h>
@@ -489,25 +490,70 @@ int do_uintr_register_sender(struct uintr_receiver_info *r_info,
 	return 0;
 }
 
-int uintr_receiver_wait(void)
+/* Called when task is unregistering/exiting or timer expired */
+static void uintr_remove_task_wait(struct task_struct *task)
+{
+	struct uintr_upid_ctx *upid_ctx, *tmp;
+	unsigned long flags;
+
+	spin_lock_irqsave(&uintr_wait_lock, flags);
+	list_for_each_entry_safe(upid_ctx, tmp, &uintr_wait_list, node) {
+		if (upid_ctx->task == task) {
+			pr_debug("wait: Removing task %d from wait\n",
+				 upid_ctx->task->pid);
+			upid_ctx->upid->nc.nv = UINTR_NOTIFICATION_VECTOR;
+			upid_ctx->waiting = false;
+			list_del(&upid_ctx->node);
+		}
+	}
+	spin_unlock_irqrestore(&uintr_wait_lock, flags);
+}
+
+void uintr_switch_to_kernel_vector(struct task_struct *t)
 {
 	struct uintr_upid_ctx *upid_ctx;
 	unsigned long flags;
 
-	if (!is_uintr_receiver(current))
-		return -EOPNOTSUPP;
-
-	upid_ctx = current->thread.ui_recv->upid_ctx;
+	upid_ctx = t->thread.ui_recv->upid_ctx;
 	upid_ctx->upid->nc.nv = UINTR_KERNEL_VECTOR;
 	upid_ctx->waiting = true;
 	spin_lock_irqsave(&uintr_wait_lock, flags);
 	list_add(&upid_ctx->node, &uintr_wait_list);
 	spin_unlock_irqrestore(&uintr_wait_lock, flags);
+}
+
+int uintr_receiver_wait(ktime_t *expires)
+{
+	struct task_struct *tsk = current;
+	struct hrtimer_sleeper t;
+
+	if (!is_uintr_receiver(tsk))
+		return -EOPNOTSUPP;
+
+	if (expires && *expires == 0)
+		return 0;
+
+	uintr_switch_to_kernel_vector(tsk);
+
+	hrtimer_init_sleeper_on_stack(&t, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_set_expires_range_ns(&t.timer, *expires, 0);
+	hrtimer_sleeper_start_expires(&t, HRTIMER_MODE_REL);
 
 	set_current_state(TASK_INTERRUPTIBLE);
-	schedule();
 
-	return -EINTR;
+	if (t.task)
+		schedule();
+
+	hrtimer_cancel(&t.timer);
+	destroy_hrtimer_on_stack(&t.timer);
+
+	if (!t.task)
+		uintr_remove_task_wait(tsk);
+
+	__set_current_state(TASK_RUNNING);
+	pr_debug("recv: Returned from schedule task=%d\n", current->pid);
+
+	return !t.task ? 0 : -EINTR;
 }
 
 /*
@@ -532,24 +578,6 @@ void uintr_wake_up_process(void)
 	spin_unlock_irqrestore(&uintr_wait_lock, flags);
 }
 
-/* Called when task is unregistering/exiting */
-static void uintr_remove_task_wait(struct task_struct *task)
-{
-	struct uintr_upid_ctx *upid_ctx, *tmp;
-	unsigned long flags;
-
-	spin_lock_irqsave(&uintr_wait_lock, flags);
-	list_for_each_entry_safe(upid_ctx, tmp, &uintr_wait_list, node) {
-		if (upid_ctx->task == task) {
-			pr_debug("wait: Removing task %d from wait\n",
-				 upid_ctx->task->pid);
-			upid_ctx->upid->nc.nv = UINTR_NOTIFICATION_VECTOR;
-			upid_ctx->waiting = false;
-			list_del(&upid_ctx->node);
-		}
-	}
-	spin_unlock_irqrestore(&uintr_wait_lock, flags);
-}
 
 int do_uintr_unregister_handler(void)
 {
@@ -810,7 +838,7 @@ void switch_uintr_return(void)
 		 */
 		
 		if (READ_ONCE(upid->puir)){
-			printk("sending self ipi\n");
+			// printk("sending self ipi\n");
 			apic->send_IPI_self(UINTR_NOTIFICATION_VECTOR);
 		}
 	}

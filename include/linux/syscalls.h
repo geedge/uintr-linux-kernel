@@ -1066,7 +1066,7 @@ asmlinkage long sys_uintr_unregister_handler(unsigned int flags);
 asmlinkage long sys_uintr_create_fd(u64 vector, unsigned int flags);
 asmlinkage long sys_uintr_register_sender(int uintr_fd, unsigned int flags);
 asmlinkage long sys_uintr_unregister_sender(int uintr_fd, unsigned int flags);
-asmlinkage long sys_uintr_wait(unsigned int flags);
+asmlinkage long sys_uintr_wait(u64 usec, unsigned int flags);
 
 /* pciconfig: alpha, arm, arm64, ia64, sparc */
 asmlinkage long sys_pciconfig_read(unsigned long bus, unsigned long dfn,
