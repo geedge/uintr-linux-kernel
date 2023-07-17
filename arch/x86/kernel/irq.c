@@ -193,6 +193,11 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 	for_each_online_cpu(j)
 		seq_printf(p, "%10u ", irq_stats(j)->uintr_kernel_notifications);
 	seq_puts(p, "  User-interrupt kernel notification event\n");
+	
+	seq_printf(p, "%*s: ", prec, "UKN");
+	for_each_online_cpu(j)
+		seq_printf(p, "%10u ", irq_stats(j)->uintr_event_notifications);
+	seq_puts(p, "  User-interrupt event notification\n");
 #endif
 	return 0;
 }
@@ -373,6 +378,17 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_uintr_kernel_notification)
 	inc_irq_stat(uintr_kernel_notifications);
 
 	uintr_wake_up_process();
+}
+/*
+ * Handler for UINTR_EVENT_VECTOR.
+ */
+DEFINE_IDTENTRY_SYSVEC(sysvec_uintr_event_notification)
+{
+	/* TODO: Add entry-exit tracepoints */
+	ack_APIC_irq();
+	inc_irq_stat(uintr_event_notifications);
+
+	/* do event things */ 
 }
 #endif
 
