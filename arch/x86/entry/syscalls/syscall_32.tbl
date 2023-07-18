@@ -459,3 +459,4 @@
 452	i386	uintr_register_sender	sys_uintr_register_sender
 453	i386	uintr_unregister_sender	sys_uintr_unregister_sender
 454	i386	uintr_wait		sys_uintr_wait
+455	i386	uintr_event		sys_uintr_event

@@ -376,6 +376,7 @@
 452	common	uintr_register_sender	sys_uintr_register_sender
 453	common	uintr_unregister_sender	sys_uintr_unregister_sender
 454	common	uintr_wait		sys_uintr_wait
+455	common	uintr_event		sys_uintr_event
 
 #
 # Due to a historical design error, certain syscalls are numbered differently

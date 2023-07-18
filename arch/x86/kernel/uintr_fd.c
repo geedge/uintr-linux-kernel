@@ -321,3 +321,12 @@ SYSCALL_DEFINE2(uintr_wait, u64, usec, unsigned int, flags)
 	expires = usec * NSEC_PER_USEC;
 	return uintr_receiver_wait(&expires);
 }
+
+SYSCALL_DEFINE1(uintr_event, unsigned int, flags)
+{
+	if (!uintr_arch_enabled())
+		return -EOPNOTSUPP;
+
+	int fd = flags;
+	return do_uintr_event_init(fd);
+}

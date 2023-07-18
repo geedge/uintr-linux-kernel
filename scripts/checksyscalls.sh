@@ -210,6 +210,7 @@ cat << EOF
 #define __IGNORE_uintr_register_sender
 #define __IGNORE_uintr_unregister_sender
 #define __IGNORE_uintr_wait
+#define __IGNORE_uintr_event
 
 /* ... including the "new" 32-bit uid syscalls */
 #define __IGNORE_lchown32

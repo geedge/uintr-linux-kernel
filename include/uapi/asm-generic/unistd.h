@@ -892,9 +892,11 @@ __SYSCALL(__NR_uintr_register_sender, sys_uintr_register_sender)
 __SYSCALL(__NR_uintr_unregister_sender, sys_uintr_unregister_sender)
 #define __NR_uintr_wait 454
 __SYSCALL(__NR_uintr_wait, sys_uintr_wait)
+#define __NR_uintr_event 455
+__SYSCALL(__NR_uintr_event, sys_uintr_event)
 
 #undef __NR_syscalls
-#define __NR_syscalls 455
+#define __NR_syscalls 456
 
 /*
  * 32 bit systems traditionally used different
