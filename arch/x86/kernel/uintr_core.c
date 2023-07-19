@@ -14,7 +14,7 @@
 #include <linux/slab.h>
 #include <linux/task_work.h>
 #include <linux/uaccess.h>
-
+#include <linux/eventfd.h>
 #include <asm/apic.h>
 #include <asm/fpu/internal.h>
 #include <asm/irq_vectors.h>
@@ -58,6 +58,10 @@ struct uintr_sender {
 /* TODO: To remove the global lock, move to a per-cpu wait list. */
 static DEFINE_SPINLOCK(uintr_wait_lock);
 static struct list_head uintr_wait_list = LIST_HEAD_INIT(uintr_wait_list);
+
+/* for uint_event*/
+static DEFINE_SPINLOCK(uintr_event_lock);
+static struct eventfd_ctx *uintr_event_ctx = NULL;
 
 inline bool uintr_arch_enabled(void)
 {
@@ -509,6 +513,48 @@ static void uintr_remove_task_wait(struct task_struct *task)
 	spin_unlock_irqrestore(&uintr_wait_lock, flags);
 }
 
+int do_uintr_event_init(int fd){
+	struct task_struct *tsk = current;
+	struct uintr_upid_ctx *upid_ctx;
+	unsigned long flags;
+
+	if (!is_uintr_receiver(tsk))
+		return -EOPNOTSUPP;
+
+	upid_ctx = tsk->thread.ui_recv->upid_ctx;
+	upid_ctx->upid->nc.nv = UINTR_EVENT_VECTOR;
+
+	spin_lock_irqsave(&uintr_event_lock, flags);
+	uintr_event_ctx = eventfd_ctx_fdget(fd);
+	spin_unlock_irqrestore(&uintr_event_lock, flags);
+
+	if (IS_ERR(uintr_event_ctx))
+		return PTR_ERR(uintr_event_ctx);
+	return 0;
+}
+
+void destroy_uintr_event(void){
+	unsigned long flags;
+
+	spin_lock_irqsave(&uintr_event_lock, flags);
+	if (uintr_event_ctx){
+		eventfd_ctx_put(uintr_event_ctx);
+		uintr_event_ctx = NULL;
+	}
+	spin_unlock_irqrestore(&uintr_event_lock, flags);
+}
+
+void uintr_event_write(){
+	unsigned long flags;
+	printk("uintr_event\n");
+	spin_lock_irqsave(&uintr_event_lock, flags);
+	if (uintr_event_ctx){
+		eventfd_signal(uintr_event_ctx, 1);
+		printk("uintr_event_write\n");
+	}
+	spin_unlock_irqrestore(&uintr_event_lock, flags);
+}
+
 void uintr_switch_to_kernel_vector(struct task_struct *t)
 {
 	struct uintr_upid_ctx *upid_ctx;
@@ -639,6 +685,8 @@ int do_uintr_unregister_handler(void)
 	t->thread.ui_recv = NULL;
 
 	fpregs_unlock();
+
+	destroy_uintr_event();
 
 	return 0;
 }
@@ -773,7 +821,9 @@ void switch_uintr_prepare(struct task_struct *prev)
 
 	if (is_uintr_receiver(prev) && !is_uintr_waiting(prev)) {
 		upid = prev->thread.ui_recv->upid_ctx->upid;
-		set_bit(UPID_SN, (unsigned long *)&upid->nc.status);
+		// set_bit(UPID_SN, (unsigned long *)&upid->nc.status);
+		clear_bit(UPID_SN, (unsigned long *)&upid->nc.status);
+		clear_bit(UPID_ON, (unsigned long *)&upid->nc.status);
 	}
 }
 
@@ -819,6 +869,7 @@ void switch_uintr_return(void)
 		 * NDST to avoid incorrect interrupt routing.
 		 */
 		upid = current->thread.ui_recv->upid_ctx->upid;
+		upid->nc.nv = UINTR_EVENT_VECTOR;
 		upid->nc.ndst = cpu_to_ndst(smp_processor_id());
 		clear_bit(UPID_SN, (unsigned long *)&upid->nc.status);
 
@@ -837,10 +888,10 @@ void switch_uintr_return(void)
 		 * updated after the read.
 		 */
 		
-		if (READ_ONCE(upid->puir)){
-			// printk("sending self ipi\n");
-			apic->send_IPI_self(UINTR_NOTIFICATION_VECTOR);
-		}
+		// if (READ_ONCE(upid->puir)){
+		// 	// printk("sending self ipi\n");
+		// 	apic->send_IPI_self(UINTR_NOTIFICATION_VECTOR);
+		// }
 	}
 }
 

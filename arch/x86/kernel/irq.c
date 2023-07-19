@@ -389,6 +389,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_uintr_event_notification)
 	inc_irq_stat(uintr_event_notifications);
 
 	/* do event things */ 
+	uintr_event_write();
 }
 #endif
 
