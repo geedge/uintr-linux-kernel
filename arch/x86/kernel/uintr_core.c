@@ -62,6 +62,7 @@ static struct list_head uintr_wait_list = LIST_HEAD_INIT(uintr_wait_list);
 /* for uint_event*/
 static DEFINE_SPINLOCK(uintr_event_lock);
 static struct eventfd_ctx *uintr_event_ctx = NULL;
+// static struct list_head uintr_event_list = LIST_HEAD_INIT(uintr_event_list);
 
 inline bool uintr_arch_enabled(void)
 {
@@ -525,6 +526,7 @@ int do_uintr_event_init(int fd){
 	upid_ctx->upid->nc.nv = UINTR_EVENT_VECTOR;
 
 	spin_lock_irqsave(&uintr_event_lock, flags);
+	// list_add(&upid_ctx->node, &uintr_event_list);
 	uintr_event_ctx = eventfd_ctx_fdget(fd);
 	spin_unlock_irqrestore(&uintr_event_lock, flags);
 
@@ -533,10 +535,26 @@ int do_uintr_event_init(int fd){
 	return 0;
 }
 
+void uintr_event_rst(){
+	struct task_struct *tsk = current;
+	struct uintr_upid_ctx *upid_ctx;
+
+	if (is_uintr_receiver(tsk))
+		upid_ctx = tsk->thread.ui_recv->upid_ctx;
+		upid_ctx->upid->nc.nv = UINTR_EVENT_VECTOR;
+		clear_bit(UPID_SN, (unsigned long *)&upid_ctx->upid->nc.status);
+		clear_bit(UPID_ON, (unsigned long *)&upid_ctx->upid->nc.status);
+		printk("uintr_event_rst uvect=%d\n", upid_ctx->upid->nc.nv);
+}
+
 void destroy_uintr_event(void){
 	unsigned long flags;
+	// struct uintr_upid_ctx *upid_ctx, *tmp;
 
 	spin_lock_irqsave(&uintr_event_lock, flags);
+	// list_for_each_entry_safe(upid_ctx, tmp, &uintr_event_list, node) {
+	// 	list_del(&upid_ctx->node);
+	// }
 	if (uintr_event_ctx){
 		eventfd_ctx_put(uintr_event_ctx);
 		uintr_event_ctx = NULL;
@@ -546,11 +564,16 @@ void destroy_uintr_event(void){
 
 void uintr_event_write(){
 	unsigned long flags;
+	// struct uintr_upid_ctx *upid_ctx, *tmp;
 	printk("uintr_event\n");
 	spin_lock_irqsave(&uintr_event_lock, flags);
 	if (uintr_event_ctx){
-		eventfd_signal(uintr_event_ctx, 1);
 		printk("uintr_event_write\n");
+		// list_for_each_entry_safe(upid_ctx, tmp, &uintr_event_list, node) {
+		// 	clear_bit(UPID_SN, (unsigned long *)&upid_ctx->upid->nc.status);
+		// 	clear_bit(UPID_ON, (unsigned long *)&upid_ctx->upid->nc.status);
+		// }
+		eventfd_signal(uintr_event_ctx, 1);
 	}
 	spin_unlock_irqrestore(&uintr_event_lock, flags);
 }
@@ -835,7 +858,17 @@ void switch_uintr_prepare(struct task_struct *prev)
 void switch_uintr_return(void)
 {
 	struct uintr_upid *upid;
-	u64 misc_msr;
+	u64 misc_msr, uintr_tt_msr,uintr_tmp;
+
+	if (is_uintr_sender(current)){
+		// printk("uintr sender return\n");
+		// printk("uintr_tt is %lx\n",(u64)current->thread.ui_send->uitt_ctx->uitt | 1);
+
+		uintr_tmp = (u64)current->thread.ui_send->uitt_ctx->uitt | 1;
+		rdmsrl(MSR_IA32_UINTR_TT, uintr_tt_msr);
+		if (uintr_tt_msr != uintr_tmp)
+			wrmsrl(MSR_IA32_UINTR_TT, uintr_tmp);
+	}
 
 	if (is_uintr_receiver(current)) {
 		/*

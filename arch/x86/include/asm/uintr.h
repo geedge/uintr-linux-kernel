@@ -66,6 +66,7 @@ void uintr_wake_up_process(void);
 
 int do_uintr_event_init(int flag);
 void uintr_event_write(void);
+void uintr_event_rst(void);
 
 #else /* !CONFIG_X86_USER_INTERRUPTS */
 
@@ -73,7 +74,8 @@ static inline void uintr_free(struct task_struct *task) {}
 static inline void switch_uintr_prepare(struct task_struct *prev) {}
 static inline void switch_uintr_return(void) {}
 static inline void uintr_wake_up_process(void) {}
-void uintr_event_write(void) {}
+static inline void uintr_event_write(void) {}
+static inline void uintr_event_rst(void) {}
 
 #endif /* CONFIG_X86_USER_INTERRUPTS */
 

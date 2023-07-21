@@ -38,6 +38,7 @@
 #include <linux/compat.h>
 #include <linux/rculist.h>
 #include <net/busy_poll.h>
+#include <asm/uintr.h>
 
 /*
  * LOCKING:
@@ -2235,6 +2236,8 @@ SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
 		int, maxevents, int, timeout)
 {
 	struct timespec64 to;
+
+	uintr_event_rst(); //清除 uint_event 状态
 
 	return do_epoll_wait(epfd, events, maxevents,
 			     ep_timeout_to_timespec(&to, timeout));
