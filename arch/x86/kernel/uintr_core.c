@@ -539,12 +539,13 @@ void uintr_event_rst(){
 	struct task_struct *tsk = current;
 	struct uintr_upid_ctx *upid_ctx;
 
-	if (is_uintr_receiver(tsk))
+	if (is_uintr_receiver(tsk)){
 		upid_ctx = tsk->thread.ui_recv->upid_ctx;
 		upid_ctx->upid->nc.nv = UINTR_EVENT_VECTOR;
 		clear_bit(UPID_SN, (unsigned long *)&upid_ctx->upid->nc.status);
 		clear_bit(UPID_ON, (unsigned long *)&upid_ctx->upid->nc.status);
 		printk("uintr_event_rst uvect=%d\n", upid_ctx->upid->nc.nv);
+	}
 }
 
 void destroy_uintr_event(void){
