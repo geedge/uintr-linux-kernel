@@ -62,7 +62,7 @@ static struct list_head uintr_wait_list = LIST_HEAD_INIT(uintr_wait_list);
 /* for uint_event*/
 static DEFINE_SPINLOCK(uintr_event_lock);
 static struct eventfd_ctx *uintr_event_ctx = NULL;
-// static struct list_head uintr_event_list = LIST_HEAD_INIT(uintr_event_list);
+static struct list_head uintr_event_list = LIST_HEAD_INIT(uintr_event_list);
 
 inline bool uintr_arch_enabled(void)
 {
@@ -514,6 +514,31 @@ static void uintr_remove_task_wait(struct task_struct *task)
 	spin_unlock_irqrestore(&uintr_wait_lock, flags);
 }
 
+static void uintr_add_event_wait(struct task_struct *task)
+{
+	struct uintr_upid_ctx *upid_ctx, *tmp;
+	unsigned long flags;
+	bool flag = false;
+
+	spin_lock_irqsave(&uintr_event_lock, flags);
+	list_for_each_entry_safe(upid_ctx, tmp, &uintr_event_list, node) {
+		if (upid_ctx->task == task) {
+			flag = true;
+		}
+	}
+	if (flag) {
+		printk("uintr_add_event_wait : task %d exist at event_wait\n",
+		       upid_ctx->task->pid);
+	} else {
+		printk("uintr_add_event_wait : add task %d to event_wait\n",
+		       upid_ctx->task->pid);
+		list_add(&(task->thread.ui_recv->upid_ctx->node),
+			 &uintr_event_list);
+	}
+	spin_unlock_irqrestore(&uintr_event_lock, flags);
+}
+
+
 int do_uintr_event_init(int fd){
 	struct task_struct *tsk = current;
 	struct uintr_upid_ctx *upid_ctx;
@@ -538,6 +563,9 @@ int do_uintr_event_init(int fd){
 		return PTR_ERR(uintr_event_ctx);
 	
 	printk("do_uintr_event_init uintr_event_ctx");
+
+	uintr_add_event_wait(tsk);
+
 	return 0;
 }
 
@@ -571,16 +599,35 @@ void destroy_uintr_event(void){
 
 void uintr_event_write(){
 	unsigned long flags;
-	// struct uintr_upid_ctx *upid_ctx, *tmp;
+	struct uintr_upid_ctx *upid_ctx, *tmp;
 	printk("uintr_event\n");
 	spin_lock_irqsave(&uintr_event_lock, flags);
 	if (uintr_event_ctx){
 		printk("uintr_event_write\n");
-		// list_for_each_entry_safe(upid_ctx, tmp, &uintr_event_list, node) {
-		// 	clear_bit(UPID_SN, (unsigned long *)&upid_ctx->upid->nc.status);
-		// 	clear_bit(UPID_ON, (unsigned long *)&upid_ctx->upid->nc.status);
-		// }
+		list_for_each_entry_safe(upid_ctx, tmp, &uintr_event_list, node) {
+			clear_bit(UPID_SN, (unsigned long *)&upid_ctx->upid->nc.status);
+			clear_bit(UPID_ON, (unsigned long *)&upid_ctx->upid->nc.status);
+		}
 		eventfd_signal(uintr_event_ctx, 1);
+	}
+	spin_unlock_irqrestore(&uintr_event_lock, flags);
+}
+
+/* Called when task is unregistering/exiting or timer expired */
+static void uintr_remove_event_wait(struct task_struct *task)
+{
+	struct uintr_upid_ctx *upid_ctx, *tmp;
+	unsigned long flags;
+
+	spin_lock_irqsave(&uintr_event_lock, flags);
+	list_for_each_entry_safe(upid_ctx, tmp, &uintr_event_list, node) {
+		if (upid_ctx->task == task) {
+			printk("uintr_remove_event_wait : Removing task %d from event_wait\n",
+				 upid_ctx->task->pid);
+			set_bit(UPID_SN, (unsigned long *)&upid_ctx->upid->nc.status);
+			set_bit(UPID_ON, (unsigned long *)&upid_ctx->upid->nc.status);
+			list_del(&upid_ctx->node);
+		}
 	}
 	spin_unlock_irqrestore(&uintr_event_lock, flags);
 }
@@ -717,6 +764,7 @@ int do_uintr_unregister_handler(void)
 	fpregs_unlock();
 
 	destroy_uintr_event();
+	uintr_remove_event_wait(t);
 
 	return 0;
 }
@@ -988,6 +1036,7 @@ void uintr_free(struct task_struct *t)
 		 */
 		set_bit(UPID_SN, (unsigned long *)&ui_recv->upid_ctx->upid->nc.status);
 		uintr_remove_task_wait(t);
+		uintr_remove_event_wait(t); // remove event wait
 		ui_recv->upid_ctx->receiver_active = false;
 		put_upid_ref(ui_recv->upid_ctx);
 		kfree(ui_recv);
