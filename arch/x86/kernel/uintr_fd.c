@@ -324,6 +324,7 @@ SYSCALL_DEFINE2(uintr_wait, u64, usec, unsigned int, flags)
 
 SYSCALL_DEFINE1(uintr_event, unsigned int, flags)
 {
+	printk("uintr_event called\n");
 	if (!uintr_arch_enabled())
 		return -EOPNOTSUPP;
 

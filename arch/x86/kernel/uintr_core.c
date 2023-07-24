@@ -519,8 +519,12 @@ int do_uintr_event_init(int fd){
 	struct uintr_upid_ctx *upid_ctx;
 	unsigned long flags;
 
-	if (!is_uintr_receiver(tsk))
+	printk("do_uintr_event_init\n");
+
+	if (!is_uintr_receiver(tsk)){
+		printk("do_uintr_event_init not receiver\n");
 		return -EOPNOTSUPP;
+	}
 
 	upid_ctx = tsk->thread.ui_recv->upid_ctx;
 	upid_ctx->upid->nc.nv = UINTR_EVENT_VECTOR;
@@ -532,6 +536,8 @@ int do_uintr_event_init(int fd){
 
 	if (IS_ERR(uintr_event_ctx))
 		return PTR_ERR(uintr_event_ctx);
+	
+	printk("do_uintr_event_init uintr_event_ctx");
 	return 0;
 }
 
