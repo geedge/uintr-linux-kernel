@@ -2237,7 +2237,7 @@ SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
 {
 	struct timespec64 to;
 
-	uintr_event_rst(); //清除 uint_event 状态
+	// uintr_event_rst(); //清除 uint_event 状态
 
 	return do_epoll_wait(epfd, events, maxevents,
 			     ep_timeout_to_timespec(&to, timeout));
