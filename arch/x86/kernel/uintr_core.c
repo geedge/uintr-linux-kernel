@@ -600,10 +600,10 @@ void destroy_uintr_event(void){
 void uintr_event_write(){
 	unsigned long flags;
 	struct uintr_upid_ctx *upid_ctx, *tmp;
-	printk("uintr_event\n");
+	// printk("uintr_event\n");
 	spin_lock_irqsave(&uintr_event_lock, flags);
 	if (uintr_event_ctx){
-		printk("uintr_event_write\n");
+		// printk("uintr_event_write\n");
 		list_for_each_entry_safe(upid_ctx, tmp, &uintr_event_list, node) {
 			clear_bit(UPID_SN, (unsigned long *)&upid_ctx->upid->nc.status);
 			clear_bit(UPID_ON, (unsigned long *)&upid_ctx->upid->nc.status);
